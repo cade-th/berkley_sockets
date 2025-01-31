@@ -10,7 +10,30 @@
 #define LISTEN_BACKLOG 5 // number of connections to keep waiting
 #define BUFSIZE 1024
 
-void server() {
+#define CONFIG_FIELDS \
+    X(char *, program)  \
+    X(char *, type)      \
+    X(char *, hostname)  \
+    X(char *, port)  
+
+typedef struct {
+    #define X(type, name) type name;
+    CONFIG_FIELDS
+    #undef X
+} Config;
+
+Config parse_config(char *argv[]) {
+    Config config;
+    int i = 0;
+
+    #define X(type, name) config.name = argv[i++];
+    CONFIG_FIELDS
+    #undef X
+
+    return config;
+}
+
+void server(Config *config) {
 	int list_sock, comm_sock;
 	struct sockaddr_in server; // Server address
 	
@@ -28,7 +51,7 @@ void server() {
 	// 2. Initiate the fields of the server address
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(INADDR_ANY);
-	server.sin_port = htons(SERV_PORT);
+	server.sin_port = htons(atoi(config->port));
 
 	// 3. Bind the socket to the given server address
 	if (bind(list_sock, (struct sockaddr *) &server, sizeof(server))) {
@@ -66,21 +89,8 @@ void server() {
 		
 }
 
-void client(const int argc, char *argv[]) {
-	char *program; // This program's name
-	char *hostname; // Server's hostname
-	int port; // Server port
+void client(Config *config) {
 	
-	// 0. Check Arguments
-	program = argv[0];
-	if (argc != 3) {
-		fprintf(stderr, "usage: %s hostname port\n", program);
-		exit(1);
-	} else {
-		hostname = argv[1];
-		port = atoi(argv[2]);
-	}
-
 	// 1. Create socket
 	int comm_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (comm_sock < 0) {
@@ -91,11 +101,11 @@ void client(const int argc, char *argv[]) {
 	// 2. Initialize the fields of the server address
 	struct sockaddr_in server; // address of the server
 	server.sin_family = AF_INET;
-	server.sin_port = htons(port);
+	server.sin_port = htons(atoi(config->port));
 	// Look up the hostname specified on command line
-	struct hostent *hostp = gethostbyname(hostname); // server hostname
+	struct hostent *hostp = gethostbyname(config->hostname); // server hostname
 	if (hostp == NULL) {
-		fprintf(stderr, "%s: unknown host '%s'\n", program, hostname);
+		fprintf(stderr, "%s: unknown host '%s'\n", config->program, config->hostname);
 		exit(3);
 	}
 	memcpy(&server.sin_addr, hostp->h_addr_list[0], hostp->h_length);
@@ -125,10 +135,21 @@ void client(const int argc, char *argv[]) {
 	close(comm_sock);
 }
 
+
+
 int main(const int argc, char *argv[]) {
 
-	// server();
-	client(argc, argv);
+	Config config = parse_config(argv + 1);
+
+	if (strcmp(config.type, "server") == 0) {
+		server(&config);
+	} else if (strcmp(config.type, "client") == 0) {
+		client(&config);
+	}
+	else {
+		fprintf(stderr, "Invalid type: %s. Use 'server' or 'client'.\n", config.type);
+		exit(1);
+	}
 	return 0;
 }
 
