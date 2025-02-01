@@ -6,7 +6,6 @@
 #include <arpa/inet.h> // socket-related calls
 #include <netdb.h> // more socket related structures
 
-#define SERV_PORT 3000 // Server port number
 #define LISTEN_BACKLOG 5 // number of connections to keep waiting
 #define BUFSIZE 1024
 
@@ -76,7 +75,7 @@ void server(char *program, char *hostname, int port) {
 				if (bytes_read == 0) 
 					printf("Ending connection\n");
 				else 
-					printf("\t%s", buf);	
+					printf("%s", buf);	
 			} while (bytes_read != 0); 
 
 				close(comm_sock);
@@ -91,49 +90,46 @@ void server(char *program, char *hostname, int port) {
 }
 
 void client(char *program, char *hostname, int port) {
-	
-	// 1. Create socket
-	int comm_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (comm_sock < 0) {
-		perror("opening socket");
-		exit(2);
-	}
+    // 1. Create socket
+    int comm_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (comm_sock < 0) {
+        perror("opening socket");
+        exit(2);
+    }
 
-	// 2. Initialize the fields of the server address
-	struct sockaddr_in server; // address of the server
-	server.sin_family = AF_INET;
-	server.sin_port = htons(port);
-	// Look up the hostname specified on command line
-	struct hostent *hostp = gethostbyname(hostname); // server hostname
-	if (hostp == NULL) {
-		fprintf(stderr, "%s: unknown host '%s'\n", program, hostname);
-		exit(3);
-	}
-	memcpy(&server.sin_addr, hostp->h_addr_list[0], hostp->h_length);
+    // 2. Initialize the fields of the server address
+    struct sockaddr_in server; // address of the server
+    server.sin_family = AF_INET;
+    server.sin_port = htons(port);
 
-	// 3. Connect the socket to that server
-	if (connect(comm_sock, (struct sockaddr *) &server, sizeof(server)) < 0) {
-		perror("connecting stream socket");
-		exit(4);
-	}
-	printf("Connected!\n");
+    // Look up the hostname specified on command line
+    struct hostent *hostp = gethostbyname(hostname);
+    if (hostp == NULL) {
+        fprintf(stderr, "%s: unknown host '%s'\n", program, hostname);
+        exit(3);
+    }
+    memcpy(&server.sin_addr, hostp->h_addr_list[0], hostp->h_length);
 
-	// 4. Read content from stdin (file descriptor 0) and write to socket)
-	char buf[BUFSIZE]; // a buffer for reading data from stdin
-	int bytes_read; // # bytes read from socket
-	memset(buf, 0, BUFSIZE); // clear up the buffer
-	do {
-		if ((bytes_read = read(0,buf, BUFSIZE - 1)) < 0) {
-			
-		} else {
-			if (write(comm_sock, buf, bytes_read) < 0) {
-				perror("writing on stream socket");
-				exit(6);
-			}
-		}
-	} while (bytes_read > 0);
+    // 3. Connect the socket to the server
+    if (connect(comm_sock, (struct sockaddr *) &server, sizeof(server)) < 0) {
+        perror("connecting stream socket");
+        exit(4);
+    }
+    printf("Connected to %s on port %d!\n", hostname, port);
 
-	close(comm_sock);
+    // 4. Send the "hello" message
+    char *message = "GET / HTTP/1.1\r\n"
+                "Host: example.com\r\n"
+                "\r\n";
+
+    if (write(comm_sock, message, strlen(message)) < 0) {
+        perror("writing on stream socket");
+        exit(6);
+    }
+    printf("Message sent: %s\n", message);
+
+    // Close the socket
+    close(comm_sock);
 }
 
 void run(Config *config) {
