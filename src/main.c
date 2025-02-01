@@ -10,6 +10,7 @@
 #define LISTEN_BACKLOG 5 // number of connections to keep waiting
 #define BUFSIZE 1024
 
+// TODO: find some macro magic to automate the types of these fields so they're not all strings maybe?
 #define CONFIG_FIELDS \
     X(char *, program)  \
     X(char *, type)      \
@@ -33,7 +34,7 @@ Config parse_config(char *argv[]) {
     return config;
 }
 
-void server(Config *config) {
+void server(char *program, char *hostname, int port) {
 	int list_sock, comm_sock;
 	struct sockaddr_in server; // Server address
 	
@@ -51,7 +52,7 @@ void server(Config *config) {
 	// 2. Initiate the fields of the server address
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(INADDR_ANY);
-	server.sin_port = htons(atoi(config->port));
+	server.sin_port = htons(port);
 
 	// 3. Bind the socket to the given server address
 	if (bind(list_sock, (struct sockaddr *) &server, sizeof(server))) {
@@ -89,7 +90,7 @@ void server(Config *config) {
 		
 }
 
-void client(Config *config) {
+void client(char *program, char *hostname, int port) {
 	
 	// 1. Create socket
 	int comm_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -101,11 +102,11 @@ void client(Config *config) {
 	// 2. Initialize the fields of the server address
 	struct sockaddr_in server; // address of the server
 	server.sin_family = AF_INET;
-	server.sin_port = htons(atoi(config->port));
+	server.sin_port = htons(port);
 	// Look up the hostname specified on command line
-	struct hostent *hostp = gethostbyname(config->hostname); // server hostname
+	struct hostent *hostp = gethostbyname(hostname); // server hostname
 	if (hostp == NULL) {
-		fprintf(stderr, "%s: unknown host '%s'\n", config->program, config->hostname);
+		fprintf(stderr, "%s: unknown host '%s'\n", program, hostname);
 		exit(3);
 	}
 	memcpy(&server.sin_addr, hostp->h_addr_list[0], hostp->h_length);
@@ -135,21 +136,22 @@ void client(Config *config) {
 	close(comm_sock);
 }
 
-
+void run(Config *config) {
+	strcmp(config->type, "server") == 0 ? 
+	  server(config->program, config->hostname, atoi(config->port)) 
+	: client(config->program, config->hostname, atoi(config->port));
+}		
 
 int main(const int argc, char *argv[]) {
-
-	Config config = parse_config(argv + 1);
-
-	if (strcmp(config.type, "server") == 0) {
-		server(&config);
-	} else if (strcmp(config.type, "client") == 0) {
-		client(&config);
+	if (argc != 4) {
+		printf("Usage: %s <type> <hostname> <port>\n", argv[0]);
+		return 1;
 	}
-	else {
-		fprintf(stderr, "Invalid type: %s. Use 'server' or 'client'.\n", config.type);
-		exit(1);
-	}
+
+	Config config = parse_config(argv);
+
+	run(&config);
+
 	return 0;
 }
 
